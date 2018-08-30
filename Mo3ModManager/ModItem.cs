@@ -41,8 +41,10 @@ namespace Mo3ModManager
             this.Node = Node;
             foreach (var child in Node.Childs)
             {
-                var childItem = new ModItem(child);
-                childItem.Parent = this;
+                var childItem = new ModItem(child)
+                {
+                    Parent = this
+                };
                 this.Items.Add(childItem);
             }
         }

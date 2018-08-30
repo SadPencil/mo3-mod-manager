@@ -16,6 +16,8 @@ namespace Mo3ModManager
             this.Node = Arguments.Node;
         }
 
+
+        /*
         /// <summary>
         /// Only make sense in multi-threading. Not implemented now.
         /// </summary>
@@ -31,7 +33,7 @@ namespace Mo3ModManager
         /// Only make sense in multi-threading. Not implemented now.
         /// </summary>
         public ProcessStatus Status { get; set; }
-
+        */
 
         public string RunningDirectory { get; set; }
         public string ProfileDirectory { get; set; }
@@ -99,30 +101,15 @@ namespace Mo3ModManager
             }
         }
 
-        /// <summary>
-        /// Run a program and wait for user's confirmation that the program has exited.
-        /// This is a workaround for Windows 7 and earlier.
-        /// This method MUST be run in the UI thread.
-        /// </summary>
-        /// <param name="Fullname">The program's path.</param>
-        /// <param name="Arguments">The arguments.</param>
-        /// <param name="WorkingDirectory">The working directory.</param>
-        private void RunAndWaitLegacy(string Fullname, string Arguments, string WorkingDirectory)
-        {
-            new Process()
-            {
-                StartInfo = new ProcessStartInfo()
-                {
-                    FileName = Fullname,
-                    Arguments = Arguments,
-                    WorkingDirectory = WorkingDirectory
-                }
-            }.Start();
-           
-            System.Windows.Forms.MessageBox.Show("You are still using Windows 7 or earlier.\n It's too old so we can't know whether the game has exited or not.\n Click the OK button when the game has exited.",
-                "You should consider upgrading to Windows 10", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Exclamation);
-        }
 
+        /// <summary>
+        /// Run a program and wait till all of its descendants to exit. Even if the program exited early than its descendants, this method can still work properly.
+        /// Only supports Windows 8 and newer.
+        /// </summary>
+        private void RunStep2_RunAndWait()
+        {
+            this.RunStep2_RunAndWait(Path.Combine(this.RunningDirectory, this.Node.MainExecutable), this.Node.Arguments, this.RunningDirectory);
+        }
 
         /// <summary>
         /// Run a program and wait till all of its descendants to exit. Even if the program exited early than its descendants, this method can still work properly.
@@ -131,13 +118,13 @@ namespace Mo3ModManager
         /// <param name="Fullname">The program's path.</param>
         /// <param name="Arguments">The arguments.</param>
         /// <param name="WorkingDirectory">The working directory.</param>
-        private void RunAndWait(string Fullname, string Arguments, string WorkingDirectory)
+        private void RunStep2_RunAndWait(string Fullname, string Arguments, string WorkingDirectory)
         {
             string commandLine = '"' + Fullname + '"' + (Arguments == string.Empty ? string.Empty : ' ' + Arguments);
 
             //See : https://blogs.msdn.microsoft.com/oldnewthing/20130405-00/?p=4743
 
-
+            Trace.WriteLine("[Note] Start up the game...");
 
             IntPtr jobHandle = Win32.NativeMethods.CreateJobObjectW(IntPtr.Zero, String.Empty);
             if (jobHandle == IntPtr.Zero)
@@ -193,7 +180,7 @@ namespace Mo3ModManager
             // Win32.NativeConstants.CREATE_BREAKAWAY_FROM_JOB might have some problems
             // https://blog.csdn.net/jpexe/article/details/49661479
 
-            if (!Win32.NativeMethods.CreateProcessW(null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, false, Win32.NativeConstants.CREATE_SUSPENDED , IntPtr.Zero, WorkingDirectory, ref startupInfoStruct, out processInformationStruct))
+            if (!Win32.NativeMethods.CreateProcessW(null, new StringBuilder(commandLine), IntPtr.Zero, IntPtr.Zero, false, Win32.NativeConstants.CREATE_SUSPENDED, IntPtr.Zero, WorkingDirectory, ref startupInfoStruct, out processInformationStruct))
             {
                 throw new Exception("WinAPI CreateProcessW failed.  Error " + Win32.NativeMethods.GetLastError());
             }
@@ -239,7 +226,7 @@ namespace Mo3ModManager
             Win32.NativeMethods.CloseHandle(jobHandle);
             Win32.NativeMethods.CloseHandle(ioPortHandle);
 
-
+            Trace.WriteLine("[Note] Game exited.");
 
         }
 
@@ -257,18 +244,9 @@ namespace Mo3ModManager
                 }
         }
 
-        /// <summary>
-        /// Do everything to run the game from specified arguments. 
-        /// Set IsLegacy to true if the OS is Windows 7 or earlier.
-        /// If IsLegacy is set to be true, this method MUST be run in the UI thread.
-        /// </summary>
-        /// <param name="IsLegacy">Set to true if the OS is Windows 7 or earlier.</param>
-        private void RealRun(bool IsLegacy)
-        {
-            Debug.Assert(!String.IsNullOrEmpty(this.RunningDirectory));
-            Debug.Assert(!String.IsNullOrEmpty(this.ProfileDirectory));
-            Debug.Assert(this.Node != null);
 
+        private void RunStep1_Prepare()
+        {
             Trace.WriteLine("[Note] Clearing Running Directory...");
             //RunningDirectory should be empty. Delete all of them otherwise
             if (Directory.Exists(this.RunningDirectory))
@@ -294,31 +272,10 @@ namespace Mo3ModManager
                 this.Node.Compatibility);
 
             //TODO: Set the registry to avoid firewall
+        }
 
-            Trace.WriteLine("[Note] Start up the game...");
-            //Run the game
-            if (IsLegacy)
-            {
-                //Workaround for Windows 7 or earlier.
-                //Fuck old OS!
-                this.RunAndWaitLegacy(
-                     Path.Combine(this.RunningDirectory, this.Node.MainExecutable),
-                     this.Node.Arguments,
-                     this.RunningDirectory
-                    );
-
-            }
-            else
-            {
-                this.RunAndWait(
-                     Path.Combine(this.RunningDirectory, this.Node.MainExecutable),
-                     this.Node.Arguments,
-                     this.RunningDirectory
-                    );
-            }
-
-            Trace.WriteLine("[Note] Game exited.");
-
+        private void RunStep3_Clean()
+        {
             Trace.WriteLine("[Note] Remove game files...");
             //Clean the node
             this.CleanNode(this.Node);
@@ -334,30 +291,163 @@ namespace Mo3ModManager
                 Trace.WriteLine("[Note] Save profiles...");
                 //Save profiles
                 IO.CreateHardLinksOfFiles(this.RunningDirectory, this.ProfileDirectory, true);
-                //Clear Directory again
-                IO.ClearDirectory(this.RunningDirectory);
             }
 
+            IO.ClearDirectory(this.RunningDirectory);
+
+            /*
+            //Remove the directory
+            System.IO.Directory.Delete(this.RunningDirectory, true);
+            */
+
         }
 
         /// <summary>
-        /// Do everything to run the game from specified arguments. Wait and wait for user's confirmation that the game has exited.
+        /// Do everything to run the game from specified arguments. 
+        /// Run and wait for user's confirmation that the game has exited. Will block the thread.
         /// This is a workaround for Windows 7 and earlier.
         /// This method MUST be run in the UI thread.
-        /// </summary>
-        public void RunLegacy()
+        /// </summary> 
+        /// <param name="parent">The parent window of MessageBox.</param>
+        public void RunLegacy(System.Windows.Window parent)
         {
-            RealRun(true);
+            RunStep1_Prepare();
+
+            new Process()
+            {
+                StartInfo = new ProcessStartInfo()
+                {
+                    FileName = Path.Combine(this.RunningDirectory, this.Node.MainExecutable),
+                    Arguments = this.Node.Arguments,
+                    WorkingDirectory = this.RunningDirectory
+                }
+            }.Start();
+
+            //sleep for 10s
+            System.Threading.Thread.Sleep(10000);
+            System.Windows.MessageBox.Show(parent, "You are still running Windows 7 or earlier.\n It's too old so we can't know whether the game has exited or not.\n Click the OK button when the game has exited.",
+           "You should consider upgrading to Windows 10", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Exclamation);
+            System.Windows.MessageBox.Show(parent, "Only click the OK button when the game has exited.", "Double check",
+                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Exclamation);
+
+            Trace.WriteLine("[Note] Game exited.");
+
+            //wait for 3s. just in case 
+            System.Threading.Thread.Sleep(3000);
+            RunStep3_Clean();
+
         }
 
 
+
         /// <summary>
-        /// Do everything to run the game from specified arguments. Wait till game exited.
-        /// Only supports Windows 8 or newer.
+        /// Do everything to run the game from specified arguments. 
+        /// Run and wait for user's confirmation that the game has exited. Will not block the thread.
+        /// This is a workaround for Windows 7 and earlier.
+        /// This method MUST be run in the UI thread.
+        /// </summary> 
+        /// <param name="parent">The parent window of MessageBox.</param>
+        public void RunLegacyAsync(System.Windows.Window parent)
+        {
+            System.ComponentModel.BackgroundWorker worker1 = new System.ComponentModel.BackgroundWorker();
+
+            worker1.DoWork += (object worker1_sender, System.ComponentModel.DoWorkEventArgs worker1_e) =>
+            {
+                RunStep1_Prepare();
+
+                new Process()
+                {
+                    StartInfo = new ProcessStartInfo()
+                    {
+                        FileName = Path.Combine(this.RunningDirectory, this.Node.MainExecutable),
+                        Arguments = this.Node.Arguments,
+                        WorkingDirectory = this.RunningDirectory
+                    }
+                }.Start();
+
+                //sleep for 10s
+                System.Threading.Thread.Sleep(10000);
+            };
+            worker1.RunWorkerCompleted += (object worker1_sender, System.ComponentModel.RunWorkerCompletedEventArgs worker1_e) =>
+            {
+                if (worker1_e.Error != null)
+                {
+                    this.RunWorkerCompleted(worker1_sender, worker1_e);
+                }
+                else
+                {
+                    //continue
+                    System.Windows.MessageBox.Show(parent, "You are still running Windows 7 or earlier.\n It's too old so we can't know whether the game has exited or not.\n Click the OK button when the game has exited.",
+                   "You should consider upgrading to Windows 10", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Exclamation);
+                    System.Windows.MessageBox.Show(parent, "Only click the OK button when the game has exited.", "Double check",
+                        System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Exclamation);
+
+                    Trace.WriteLine("[Note] Game exited.");
+
+                    System.ComponentModel.BackgroundWorker worker2 = new System.ComponentModel.BackgroundWorker();
+
+                    worker2.DoWork += (object worker2_sender, System.ComponentModel.DoWorkEventArgs worker2_e) =>
+                    {
+                        //wait for 3s. just in case 
+                        System.Threading.Thread.Sleep(3000);
+                        RunStep3_Clean();
+                    };
+
+                    worker2.RunWorkerCompleted += (object worker2_sender, System.ComponentModel.RunWorkerCompletedEventArgs worker2_e) =>
+                    {
+                        this.RunWorkerCompleted(worker2_sender, worker2_e);
+                    };
+
+                    worker2.RunWorkerAsync();
+                }
+
+            };
+
+            worker1.RunWorkerAsync();
+
+        }
+
+        /// <summary>
+        /// Do everything to run the game from specified arguments. 
+        /// Wait till game exited. Will not block the thread.
+        /// Only supports Windows 8 or newer. 
+        /// </summary>
+        public void RunAsync()
+        {
+            System.ComponentModel.BackgroundWorker worker1 = new System.ComponentModel.BackgroundWorker();
+
+            worker1.DoWork += (object worker1_sender, System.ComponentModel.DoWorkEventArgs worker1_e) =>
+            {
+                Run();
+            };
+
+            worker1.RunWorkerCompleted += (object worker1_sender, System.ComponentModel.RunWorkerCompletedEventArgs worker1_e) =>
+            {
+                this.RunWorkerCompleted(worker1_sender, worker1_e);
+            };
+
+            worker1.RunWorkerAsync();
+
+        }
+
+        /// <summary>
+        /// Occurs when the background operation has completed, has been canceled, or has raised an exception.
+        /// </summary>
+        public event System.ComponentModel.RunWorkerCompletedEventHandler RunWorkerCompleted;
+
+        /// <summary>
+        /// Do everything to run the game from specified arguments. 
+        /// Wait till game exited. Will block the thread.
+        /// Only supports Windows 8 or newer. 
         /// </summary>
         public void Run()
         {
-            RealRun(false);
+            RunStep1_Prepare();
+            RunStep2_RunAndWait();
+
+            //wait for 3s. just in case 
+            System.Threading.Thread.Sleep(3000);
+            RunStep3_Clean();
         }
 
 

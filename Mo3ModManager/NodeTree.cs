@@ -86,6 +86,15 @@ namespace Mo3ModManager
             this.RootNodes = new List<Node>(NodeTree.RootNodes);
         }
 
+        public int Count() {
+            int count = 0;
+            foreach(var node in this.RootNodes)
+            {
+                count +=  node.Count();
+            }
+            return count;
+        }
+
         public void AddNodes(string Directory)
         {
             var nodes = GetNodesFromDirectory(Directory);

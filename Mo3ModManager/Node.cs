@@ -53,6 +53,16 @@ namespace Mo3ModManager
             this.Directory = String.Empty;
         }
 
+        public int Count()
+        {
+            int count = 1;
+            foreach (var node in this.Childs)
+            {
+                count += node.Count();
+            }
+            return count;
+        }
+
         /// <summary>
         /// Parse a Node from the "node.json" file.
         /// </summary>
@@ -119,7 +129,7 @@ namespace Mo3ModManager
             {
                 node.ParentID = String.Empty;
             }
-             
+
             node.Directory = Directory;
 
             return node;

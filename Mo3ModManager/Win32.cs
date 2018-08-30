@@ -550,7 +550,64 @@
 
         }
 
+        public partial class NativeMethods
+        {
+
+            /// Return Type: HMENU->HMENU__*
+            ///hWnd: HWND->HWND__*
+            ///bRevert: BOOL->int
+            [System.Runtime.InteropServices.DllImportAttribute("user32.dll", EntryPoint = "GetSystemMenu")]
+            public static extern System.IntPtr GetSystemMenu([System.Runtime.InteropServices.InAttribute()] System.IntPtr hWnd, [System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.Bool)] bool bRevert);
+
+        }
+        public partial class NativeMethods
+        {
+
+            /// Return Type: BOOL->int
+            ///hMenu: HMENU->HMENU__*
+            ///uIDEnableItem: UINT->unsigned int
+            ///uEnable: UINT->unsigned int
+            [System.Runtime.InteropServices.DllImportAttribute("user32.dll", EntryPoint = "EnableMenuItem")]
+            [return: System.Runtime.InteropServices.MarshalAsAttribute(System.Runtime.InteropServices.UnmanagedType.Bool)]
+            public static extern bool EnableMenuItem([System.Runtime.InteropServices.InAttribute()] System.IntPtr hMenu, uint uIDEnableItem, uint uEnable);
+
+        }
+
         #endregion
+
+        public partial class NativeConstants
+        {
+
+            /// MF_BYCOMMAND -> 0x00000000L
+            public const uint MF_BYCOMMAND = 0;
+        }
+
+        public partial class NativeConstants
+        {
+
+            /// MF_GRAYED -> 0x00000001L
+            public const uint MF_GRAYED = 1;
+        }
+
+        public partial class NativeConstants
+        {
+
+            /// SC_CLOSE -> 0xF060
+            public const uint SC_CLOSE = 61536;
+        }
+
+        public partial class NativeConstants
+        {
+
+            /// WM_SHOWWINDOW -> 0x0018
+            public const uint WM_SHOWWINDOW = 24;
+        }
+        public partial class NativeConstants
+        {
+
+            /// MF_ENABLED -> 0x00000000L
+            public const uint MF_ENABLED = 0;
+        }
 
     }
 }

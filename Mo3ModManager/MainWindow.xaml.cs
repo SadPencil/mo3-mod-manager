@@ -40,6 +40,26 @@ namespace Mo3ModManager
             }
         }
 
+        private bool isCloseButtonEnabled = true;
+        public bool IsCloseButtonEnabled {
+            get {
+                return this.isCloseButtonEnabled;
+            }
+            set {
+                this.isCloseButtonEnabled = value;
+                var hWnd = new System.Windows.Interop.WindowInteropHelper(this);
+                var sysMenu = Win32.NativeMethods.GetSystemMenu(hWnd.Handle, false);
+                Win32.NativeMethods.EnableMenuItem(sysMenu, Win32.NativeConstants.SC_CLOSE,
+                    Win32.NativeConstants.MF_BYCOMMAND | (value ? Win32.NativeConstants.MF_ENABLED : Win32.NativeConstants.MF_GRAYED)
+                    );
+            }
+        }
+
+        private void AboutButton_Click(object sender, RoutedEventArgs e)
+        {
+            System.Diagnostics.Process.Start("https://go.mo3.club/mo3-mod-manager");
+        }
+
         private void BuildProfiles()
         {
             this.ProfilesListView.Items.Clear();
@@ -117,102 +137,52 @@ namespace Mo3ModManager
         private void RunButton_Click(object sender, RoutedEventArgs e)
         {
             System.Diagnostics.Debug.Assert((this.ModTreeView.SelectedItem as ModItem).Node.IsRunnable);
- 
+
+            var arguments = new ModProcessManagerArguments
+            {
+                Node = (this.ModTreeView.SelectedItem as ModItem).Node,
+                //random directory disabled because of the firewall setting
+                //RunningDirectory = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Game-" + Guid.NewGuid().ToString().Substring(0, 8)),
+
+                RunningDirectory = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Game"),
+                ProfileDirectory = (this.ProfilesListView.SelectedItem as ProfileItem).Directory
+            };
+
+
+            this.IsEnabled = false;
+            this.IsCloseButtonEnabled = false;
+
+            ModProcessManager modProcessManager = new ModProcessManager(arguments);
+            modProcessManager.RunWorkerCompleted += (object worker_sender, System.ComponentModel.RunWorkerCompletedEventArgs worker_e) =>
+             {
+                 this.IsEnabled = true;
+                 this.IsCloseButtonEnabled = true;
+
+                 if (worker_e.Error == null)
+                 {
+                     System.Diagnostics.Trace.WriteLine("[Note] Game exited normally. Everything goes fine.");
+                 }
+                 else
+
+                 {
+                     System.Diagnostics.Trace.WriteLine("[Error] " + worker_e.Error.Message);
+                     MessageBox.Show(worker_e.Error.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                 }
+
+                 this.BuildProfiles();
+             };
+
+
             //workaround when OS<=win7
             if (System.Environment.OSVersion.Version.Major <= 5 || System.Environment.OSVersion.Version.Major == 6 && System.Environment.OSVersion.Version.Minor <= 1)
             {
-                this.IsEnabled = false;
-                ModProcessManager modProcessManager = new ModProcessManager(new ModProcessManagerArguments
-                {
-                    Node = (this.ModTreeView.SelectedItem as ModItem).Node,
-                    RunningDirectory = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Game"),
-                    ProfileDirectory = (this.ProfilesListView.SelectedItem as ProfileItem).Directory
-                });
-                try
-                {
-                    modProcessManager.RunLegacy();
-                }
-                catch(Exception ex)
-                {
-                    MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-
-                this.IsEnabled = true;
-
-                this.BuildProfiles();
+                modProcessManager.RunLegacyAsync(this);
             }
-            else {
+            else
+            {
                 //OS >=Win8
-                System.ComponentModel.BackgroundWorker backgroundWorker = new System.ComponentModel.BackgroundWorker();
-
-                backgroundWorker.DoWork += (object worker_sender, System.ComponentModel.DoWorkEventArgs worker_e) =>
-                {
-                    ModProcessManager modProcessManager = new ModProcessManager(worker_e.Argument as ModProcessManagerArguments);
-                    modProcessManager.Run();
-                };
-                backgroundWorker.RunWorkerCompleted += (object worker_sender, System.ComponentModel.RunWorkerCompletedEventArgs worker_e) =>
-                {
-                    this.IsEnabled = true;
-                    if (worker_e.Error == null)
-                    {
-                        System.Diagnostics.Trace.WriteLine("[Note] Game exited normally. Everything goes fine.");
-                    }
-                    else
-
-                    {
-                        System.Diagnostics.Trace.WriteLine("[Error] " + worker_e.Error.Message);
-                        MessageBox.Show(worker_e.Error.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    }
-
-                    this.BuildProfiles();
-                };
-
-
-                backgroundWorker.RunWorkerAsync(new ModProcessManagerArguments
-                {
-                    Node = (this.ModTreeView.SelectedItem as ModItem).Node,
-                    RunningDirectory = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Game"),
-                    ProfileDirectory = (this.ProfilesListView.SelectedItem as ProfileItem).Directory
-                });
+                modProcessManager.RunAsync();
             }
-
-
-
-
-            /*
-            System.ComponentModel.BackgroundWorker backgroundWorker = new System.ComponentModel.BackgroundWorker();
-
-            backgroundWorker.DoWork += (object worker_sender, System.ComponentModel.DoWorkEventArgs worker_e) =>
-            {
-                ModProcessManager modProcessManager = new ModProcessManager(worker_e.Argument as ModProcessManagerArguments);
-                modProcessManager.Run();
-            };
-            backgroundWorker.RunWorkerCompleted += (object worker_sender, System.ComponentModel.RunWorkerCompletedEventArgs worker_e) =>
-            {
-                //this.WindowState = WindowState.Normal;
-                this.IsEnabled = true;
-                if (worker_e.Error == null)
-                {
-                    System.Diagnostics.Trace.WriteLine("[Note] Game exited normally. Everything goes fine.");
-                }
-                else
-
-                {
-                    System.Diagnostics.Trace.WriteLine("[Error] " + worker_e.Error.Message);
-                    MessageBox.Show(worker_e.Error.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                }
-
-                this.BuildProfiles();
-            };
-
-
-            backgroundWorker.RunWorkerAsync(new ModProcessManagerArguments
-            {
-                Node = (this.ModTreeView.SelectedItem as ModItem).Node,
-                RunningDirectory = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Game"),
-                ProfileDirectory = (this.ProfilesListView.SelectedItem as ProfileItem).Directory
-            });
-            */
 
         }
 
@@ -318,11 +288,6 @@ namespace Mo3ModManager
             this.AboutButton.Content = new AccessText() { Text = "_About..." };
         }
 
-        private void AboutButton_Click(object sender, RoutedEventArgs e)
-        {
-            System.Diagnostics.Process.Start("https://www.pencillab.cn/go/mo3-mod-manager");
-        }
-
         private void DeleteModButton_Click(object sender, RoutedEventArgs e)
         {
             var selectedItem = this.ModTreeView.SelectedItem as ModItem;
@@ -377,6 +342,8 @@ namespace Mo3ModManager
                         String.Empty);
 
                     testTree.AddNodes(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Incoming"));
+
+                    if (testTree.Count() == this.NodeTree.Count()) throw new Exception("This archive doesn't contain any nodes.");
 
                     IO.CreateHardLinksOfFiles(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Incoming"), System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Mods"));
 
