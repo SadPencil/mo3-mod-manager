@@ -52,16 +52,7 @@ namespace Mo3ModManager
             this.Name = String.Empty;
             this.Directory = String.Empty;
         }
-
-        public int Count()
-        {
-            int count = 1;
-            foreach (var node in this.Childs)
-            {
-                count += node.Count();
-            }
-            return count;
-        }
+         
 
         /// <summary>
         /// Parse a Node from the "node.json" file.

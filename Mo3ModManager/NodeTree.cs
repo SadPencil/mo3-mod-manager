@@ -87,12 +87,7 @@ namespace Mo3ModManager
         }
 
         public int Count() {
-            int count = 0;
-            foreach(var node in this.RootNodes)
-            {
-                count +=  node.Count();
-            }
-            return count;
+            return this.NodesDictionary.Count();
         }
 
         public void AddNodes(string Directory)
