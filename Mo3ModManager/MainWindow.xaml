@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:Mo3ModManager"
         mc:Ignorable="d"
         FontSize="14"
-        Title="Mental Omega Mod Manager" Height="450" Width="800" Icon="Icon.ico" WindowStartupLocation="CenterScreen">
+        Title="Mental Omega Mod Manager" Height="450" Width="800" Icon="Icon.ico" WindowStartupLocation="CenterScreen" Closing="Window_Closing">
     <Grid>
         <DockPanel LastChildFill="True" >
             <Grid DockPanel.Dock="Bottom" Margin="5">

@@ -118,8 +118,21 @@ namespace Mo3ModManager
         /// </summary>
         /// <param name="SrcDirectory">The source folder.</param>
         /// <param name="DestDirectory">The destination folder.</param>
+        public static void CreateHardLinksOfFiles(string SrcDirectory, string DestDirectory)
+        {
+            CreateHardLinksOfFiles(SrcDirectory, DestDirectory, false, null);
+        }
+        /// <summary>
+        /// Create hard links for every files, just like copying folders.
+        /// </summary>
+        /// <param name="SrcDirectory">The source folder.</param>
+        /// <param name="DestDirectory">The destination folder.</param>
         /// <param name="Override">Whether override files if exist</param>
-        public static void CreateHardLinksOfFiles(string SrcDirectory, string DestDirectory, bool Override = false)
+        public static void CreateHardLinksOfFiles(string SrcDirectory, string DestDirectory, bool Override)
+        {
+            CreateHardLinksOfFiles(SrcDirectory, DestDirectory, Override);
+        }
+        public static void CreateHardLinksOfFiles(string SrcDirectory, string DestDirectory, bool Override, List<string> skipExtensionsWithDotUpper)
         {
             Debug.WriteLine("Source: " + SrcDirectory);
             //Create all folders
@@ -137,21 +150,46 @@ namespace Mo3ModManager
             {
                 string relativeName = srcFullName.Substring(SrcDirectory.Length + 1);
                 string destFullName = Path.Combine(DestDirectory, relativeName);
-                if (!File.Exists(destFullName))
+
+                CreateHardLinkOrCopy(destFullName, srcFullName, Override, skipExtensionsWithDotUpper);
+                //if (!File.Exists(destFullName))
+                //{
+                //    Win32.NativeMethods.CreateHardLinkW(destFullName, srcFullName, IntPtr.Zero);
+                //}
+                //else
+                //{
+                //    if (Override)
+                //    {
+                //        //File exists
+                //        Debug.WriteLine("Overrided: " + relativeName);
+                //        File.Delete(destFullName);
+                //        Win32.NativeMethods.CreateHardLinkW(destFullName, srcFullName, IntPtr.Zero);
+                //    }
+                //}
+            }
+        }
+
+        private static void CreateHardLinkOrCopy(string destFile, string srcFile, bool Override, List<string> skipExtensionsWithDot)
+        {
+            var ext = Path.GetExtension(destFile).ToUpperInvariant();
+            if (File.Exists(destFile) && Override)
+            {
+                Debug.WriteLine("Overrided: " + destFile);
+                File.Delete(destFile);
+            }
+            
+            if (!File.Exists(destFile)) {
+
+                if (skipExtensionsWithDot != null && skipExtensionsWithDot.Contains(ext))
                 {
-                    Win32.NativeMethods.CreateHardLinkW(destFullName, srcFullName, IntPtr.Zero);
+                    File.Copy(srcFile, destFile, Override);
                 }
                 else
                 {
-                    if (Override)
-                    {
-                        //File exists
-                        Debug.WriteLine("Overrided: " + relativeName);
-                        File.Delete(destFullName);
-                        Win32.NativeMethods.CreateHardLinkW(destFullName, srcFullName, IntPtr.Zero);
-                    }
+                    Win32.NativeMethods.CreateHardLinkW(destFile, srcFile, IntPtr.Zero);
                 }
-            }
+            } 
+                
         }
 
     }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -48,7 +49,7 @@ namespace Mo3ModManager
         /// Note, if a file was deleted and rebuilt, they will be considered as respective files, and the file will be reserved.
         /// </summary>
         /// <param name="ModItem">The node</param>
-        private void CleanNode(Node Node)
+        private void CleanNode(Node Node,object addition =null)
         {
             //source and destination is the same with "PrepareNode"
             string sourceDirectory = Node.FilesDirectory;
@@ -56,6 +57,11 @@ namespace Mo3ModManager
             string destinationDirectory = this.RunningDirectory;
 
             //Remove a NTFS hard link is equal to remove a file
+            Exception ex = null;
+            if (addition != null)
+            {
+                ex = (Exception)addition;
+            }
             foreach (string srcFullName in Directory.GetFiles(sourceDirectory, "*", SearchOption.AllDirectories))
             {
                 string relativeName = srcFullName.Substring(sourceDirectory.Length + 1);
@@ -66,7 +72,15 @@ namespace Mo3ModManager
                     if (IO.IsSameFile(srcFullName, destFullName))
                     {
                         //Debug.WriteLine("Delete file: " + destFullName);
-                        File.Delete(destFullName);
+                        try
+                        {
+                            File.Delete(destFullName);
+                        }
+                        catch (Exception e)
+                        {
+                            ex = e;
+                        }
+
                     }
                     else
                     {
@@ -79,7 +93,11 @@ namespace Mo3ModManager
             //Recursive for its parent
             if (!Node.IsRoot)
             {
-                this.CleanNode(Node.Parent);
+                this.CleanNode(Node.Parent,ex);
+            }
+            if (ex != null)
+            {
+                throw ex;
             }
         }
 
@@ -92,7 +110,7 @@ namespace Mo3ModManager
             string srcDirectory = Node.FilesDirectory;
             string destDirectory = this.RunningDirectory;
 
-            IO.CreateHardLinksOfFiles(srcDirectory, destDirectory);
+            IO.CreateHardLinksOfFiles(srcDirectory, destDirectory, false, new List<string>() { ".INI" });
 
             //Recursive for its parent
             if (!Node.IsRoot)
@@ -120,7 +138,7 @@ namespace Mo3ModManager
         /// <param name="WorkingDirectory">The working directory.</param>
         private void RunStep2_RunAndWait(string Fullname, string Arguments, string WorkingDirectory)
         {
-            string commandLine = '"' + Fullname + '"' + (Arguments == string.Empty ? string.Empty : ' ' + Arguments);
+            string commandLine = '"' + Fullname + '"' + (String.IsNullOrEmpty(Arguments) ? string.Empty : ' ' + Arguments);
 
             //See : https://blogs.msdn.microsoft.com/oldnewthing/20130405-00/?p=4743
 
@@ -247,6 +265,10 @@ namespace Mo3ModManager
 
         private void RunStep1_Prepare()
         {
+            if (!Directory.Exists(this.ProfileDirectory))
+            {
+                Directory.CreateDirectory(this.ProfileDirectory);
+            }
             Trace.WriteLine("[Note] Clearing Running Directory...");
             //RunningDirectory should be empty. Delete all of them otherwise
             if (Directory.Exists(this.RunningDirectory))
@@ -260,7 +282,7 @@ namespace Mo3ModManager
 
             Trace.WriteLine("[Note] Create hard links for profiles...");
             //Move profiles
-            IO.CreateHardLinksOfFiles(this.ProfileDirectory, this.RunningDirectory);
+            IO.CreateHardLinksOfFiles(this.ProfileDirectory, this.RunningDirectory, false, new List<string>() { ".INI" });
 
             Trace.WriteLine("[Note] Create hard links for game files...");
             //Create hard links recursively - from leaf node to root
@@ -272,6 +294,7 @@ namespace Mo3ModManager
                 this.Node.Compatibility);
 
             //TODO: Set the registry to avoid firewall
+
         }
 
         private void RunStep3_Clean()
@@ -290,7 +313,7 @@ namespace Mo3ModManager
             {
                 Trace.WriteLine("[Note] Save profiles...");
                 //Save profiles
-                IO.CreateHardLinksOfFiles(this.RunningDirectory, this.ProfileDirectory, true);
+                IO.CreateHardLinksOfFiles(this.RunningDirectory, this.ProfileDirectory, true, new List<string>() { ".INI" });
             }
 
             IO.ClearDirectory(this.RunningDirectory);
@@ -301,44 +324,6 @@ namespace Mo3ModManager
             */
 
         }
-
-        /// <summary>
-        /// Do everything to run the game from specified arguments. 
-        /// Run and wait for user's confirmation that the game has exited. Will block the thread.
-        /// This is a workaround for Windows 7 and earlier.
-        /// This method MUST be run in the UI thread.
-        /// </summary> 
-        /// <param name="parent">The parent window of MessageBox.</param>
-        public void RunLegacy(System.Windows.Window parent)
-        {
-            RunStep1_Prepare();
-
-            new Process()
-            {
-                StartInfo = new ProcessStartInfo()
-                {
-                    FileName = Path.Combine(this.RunningDirectory, this.Node.MainExecutable),
-                    Arguments = this.Node.Arguments,
-                    WorkingDirectory = this.RunningDirectory
-                }
-            }.Start();
-
-            //sleep for 10s
-            System.Threading.Thread.Sleep(10000);
-            System.Windows.MessageBox.Show(parent, "You are still running Windows 7 or earlier.\n It's too old so we can't know whether the game has exited or not.\n Click the OK button when the game has exited.",
-           "You should consider upgrading to Windows 10", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Exclamation);
-            System.Windows.MessageBox.Show(parent, "Only click the OK button when the game has exited.", "Double check",
-                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Exclamation);
-
-            Trace.WriteLine("[Note] Game exited.");
-
-            //wait for 3s. just in case 
-            System.Threading.Thread.Sleep(3000);
-            RunStep3_Clean();
-
-        }
-
-
 
         /// <summary>
         /// Do everything to run the game from specified arguments. 
@@ -381,6 +366,35 @@ namespace Mo3ModManager
                    "You should consider upgrading to Windows 10", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Exclamation);
                     System.Windows.MessageBox.Show(parent, "Only click the OK button when the game has exited.", "Double check",
                         System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Exclamation);
+
+                    // notice for dumbs
+                    for (var i = 0; i < 5; ++i)
+                    {
+                        Process[] ps = Process.GetProcesses();
+                        if (ps.Count() == 0) break;
+
+                        foreach (Process p in ps)
+                        {
+                            string exePath;
+                            try {
+                                exePath = Path.GetDirectoryName(p.MainModule.FileName);
+                            }
+                            catch (Exception)
+                            {
+                                continue;
+                            }
+                            
+                            System.Diagnostics.Debug.WriteLine(exePath);
+                            System.Diagnostics.Debug.WriteLine(this.RunningDirectory);
+
+                            if (this.RunningDirectory.Contains(exePath))
+                            {
+                                System.Windows.MessageBox.Show(parent, "Only click the OK button when the game has exited.", "Double check",
+                                System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Exclamation);
+                                break;
+                            }
+                        }
+                    }
 
                     Trace.WriteLine("[Note] Game exited.");
 

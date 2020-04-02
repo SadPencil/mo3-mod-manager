@@ -23,7 +23,7 @@ namespace Mo3ModManager
 
         public MainWindow()
         {
-            InitializeComponent();
+            this.InitializeComponent();
 
             this.Title += " v" + System.Diagnostics.FileVersionInfo.GetVersionInfo(System.Reflection.Assembly.GetExecutingAssembly().Location).FileVersion;
 
@@ -132,7 +132,7 @@ namespace Mo3ModManager
 
         private void ProfilesListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            On_ProgProfilesListView_SelectionChanged();
+            this.On_ProgProfilesListView_SelectionChanged();
         }
         private void RunButton_Click(object sender, RoutedEventArgs e)
         {
@@ -145,7 +145,9 @@ namespace Mo3ModManager
                 //RunningDirectory = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Game-" + Guid.NewGuid().ToString().Substring(0, 8)),
 
                 RunningDirectory = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Game"),
-                ProfileDirectory = (this.ProfilesListView.SelectedItem as ProfileItem).Directory
+                //ProfileDirectory = (this.ProfilesListView.SelectedItem as ProfileItem).Directory
+                ProfileDirectory = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Profiles", (this.ProfilesListView.SelectedItem as ProfileItem).Name, (this.ModTreeView.SelectedItem as ModItem).Node.ID)
+                
             };
 
 
@@ -245,7 +247,7 @@ namespace Mo3ModManager
                 }
                 System.IO.Directory.Move(selectedItem.Directory, newProfilePath);
                 selectedItem.ReplaceFrom(new ProfileItem(new System.IO.DirectoryInfo(newProfilePath)));
-                On_ProgProfilesListView_SelectionChanged();
+                this.On_ProgProfilesListView_SelectionChanged();
             }
             catch (Exception ex)
             {
@@ -359,6 +361,19 @@ namespace Mo3ModManager
                 }
 
 
+            }
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (!this.IsEnabled)
+            {
+                var result = System.Windows.MessageBox.Show(this, "Only close Mod Manager when the game has exited, otherwise you will lose your game data. Click \"Yes\" if you do want to exit now.", "Warning",
+                System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Exclamation);
+                if (result != MessageBoxResult.Yes)
+                {
+                    e.Cancel = true;
+                }
             }
         }
     }
